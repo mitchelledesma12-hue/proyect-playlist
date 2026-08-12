@@ -1,0 +1,362 @@
+# Documentación Técnica
+
+## Sistema de Gestión de Playlist Musical — NOVA Player
+
+| | |
+|---|---|
+| **Materia** | Estructura de Datos y Algoritmos |
+| **Institución** | CEUMH |
+| **Autores** | Mitchel Ledesma, Santiago Arellano, Xavier Zaldivar, Brandon Reyes |
+| **Archivo fuente** | `playlist_musical_gui.py` |
+| **Fecha del documento** | 12 de agosto de 2026 |
+
+---
+
+## Tabla de contenido
+
+1. Descripción general
+2. Objetivo académico
+3. Tecnologías y requisitos
+4. Instalación y ejecución
+5. Arquitectura del sistema
+6. Estructuras de datos implementadas
+7. Interfaz gráfica (`PlaylistApp`)
+8. Lógica de reproducción
+9. Funcionalidades principales
+10. Atajos de teclado
+11. Paleta de colores y diseño visual
+12. Mapa del código fuente
+13. Limitaciones conocidas
+14. Posibles mejoras futuras
+15. Créditos
+
+---
+
+## 1. Descripción general
+
+NOVA Player es una aplicación de escritorio con interfaz gráfica (Tkinter) que simula un reproductor y gestor de listas de reproducción musical. Se desarrolló como proyecto académico para la materia de Estructura de Datos y Algoritmos, y su propósito central es **demostrar de forma práctica y visual el funcionamiento de tres estructuras de datos clásicas** — lista doblemente enlazada, pila (LIFO) y cola (FIFO) — integradas en una aplicación funcional de principio a fin.
+
+El reproductor no reproduce audio real, ya que el proyecto no incluye archivos de sonido; el avance de cada canción se simula con un temporizador. En cambio, toda la lógica de la playlist, la cola de reproducción, el historial, la búsqueda, los favoritos y la navegación sí es completamente funcional y se apoya en estructuras de datos implementadas manualmente por el equipo, sin delegar el modelo a estructuras ya resueltas de Python.
+
+## 2. Objetivo académico
+
+- Implementar y aplicar, desde cero, una **lista doblemente enlazada**, una **pila** y una **cola** en un caso de uso real.
+- Relacionar cada estructura con el problema que resuelve naturalmente dentro de un reproductor de música:
+
+| Estructura | Problema que resuelve en la aplicación |
+|---|---|
+| Lista doblemente enlazada | Recorrer la playlist hacia adelante y hacia atrás, e insertar/eliminar canciones en cualquier posición. |
+| Pila (LIFO) | Recordar qué se reprodujo justo antes, para poder retroceder en el orden inverso al de reproducción. |
+| Cola (FIFO) | Poner canciones "a continuación" respetando el orden en que el usuario las fue agregando. |
+
+- Construir una interfaz gráfica completa alrededor del modelo de datos, mostrando que las estructuras no son un ejercicio aislado, sino la base de una aplicación real.
+
+## 3. Tecnologías y requisitos
+
+| Requisito | Detalle |
+|---|---|
+| Lenguaje | Python 3.9 o superior (recomendado) |
+| Librerías externas | Ninguna — el proyecto usa solo la biblioteca estándar |
+| Módulos utilizados | `tkinter`, `tkinter.ttk`, `tkinter.messagebox`, `math`, `random`, `re`, `typing`, `__future__` |
+| Interfaz gráfica | Tkinter (incluida en la instalación estándar de Python) |
+| Sistema operativo | Windows, macOS o Linux, con Tkinter disponible |
+
+> **Nota (Linux):** en algunas distribuciones Tkinter no viene preinstalado con Python y debe instalarse aparte, por ejemplo: `sudo apt install python3-tk`.
+
+## 4. Instalación y ejecución
+
+No se requiere instalar dependencias adicionales. Basta con tener Python y Tkinter disponibles.
+
+```bash
+python playlist_musical_gui.py
+```
+
+o, según el sistema:
+
+```bash
+python3 playlist_musical_gui.py
+```
+
+Al iniciar, la aplicación:
+
+1. Crea el modelo de datos (`Playlist`) y lo llena con 8 canciones de ejemplo (`cargar_ejemplo`).
+2. Construye la ventana principal y todos sus paneles.
+3. Muestra la página **Inicio**.
+
+## 5. Arquitectura del sistema
+
+El archivo está organizado en tres capas, delimitadas por comentarios dentro del propio código:
+
+```
+PlaylistApp   (interfaz gráfica — Tkinter)
+  Barra lateral · Área central · Panel del reproductor
+      │
+      │ usa
+      ▼
+Playlist   (fachada que integra las tres estructuras)
+      ├── ListaDobleEnlazada  → canciones de la playlist y navegación
+      ├── Pila                → historial de reproducción (LIFO)
+      └── Cola                → canciones "a continuación" (FIFO)
+```
+
+- **Modelo:** `Cancion`, `Nodo`, `ListaDobleEnlazada`, `Pila`, `Cola`, `Playlist`. No depende de Tkinter ni de nada visual; en principio podría reutilizarse en una interfaz de consola o en pruebas automatizadas sin cambios.
+- **Componentes visuales genéricos:** `ScrollableFrame`, `mezclar_color`, `formato_tiempo`. Utilidades reutilizables sin lógica de negocio propia.
+- **Aplicación (vista + controlador):** `PlaylistApp`. Concentra tanto la construcción de la interfaz como el manejo de eventos; llama al modelo (`self.sistema`) para cualquier cambio de datos y luego refresca los widgets afectados.
+
+## 6. Estructuras de datos implementadas
+
+### 6.1 `Cancion`
+
+Representa una canción individual.
+
+| Atributo / Método | Tipo | Descripción |
+|---|---|---|
+| `titulo` | `str` | Título de la canción (se limpia con `strip()`). |
+| `artista` | `str` | Artista o intérprete. |
+| `duracion` | `str` | Duración en formato `"m:ss"`, por ejemplo `"3:59"`. |
+| `favorita` | `bool` | Indica si el usuario la marcó como favorita (`False` por defecto). |
+| `segundos` (propiedad) | `int` | Convierte `duracion` a segundos totales. |
+| `mostrar()` | `str` | Devuelve una representación legible: `"Título - Artista (Duración)"`. |
+
+### 6.2 `Nodo`
+
+Unidad básica de la lista doblemente enlazada.
+
+| Atributo | Descripción |
+|---|---|
+| `cancion` | La `Cancion` almacenada en este nodo. |
+| `siguiente` | Referencia al nodo posterior (`None` si es el último). |
+| `anterior` | Referencia al nodo previo (`None` si es el primero). |
+
+### 6.3 `ListaDobleEnlazada`
+
+Contenedor principal de la playlist. Mantiene punteros a `inicio`, `final` y `actual` (la canción actualmente seleccionada), además del contador `cantidad`.
+
+| Método | Complejidad | Descripción |
+|---|---|---|
+| `esta_vacia()` | O(1) | Indica si la lista no tiene canciones. |
+| `insertar_inicio(cancion)` | O(1) | Inserta al principio de la playlist. |
+| `insertar_final(cancion)` | O(1) | Inserta al final, gracias al puntero `final`. |
+| `buscar(titulo)` | O(n) | Busca el nodo cuyo título coincide (sin distinguir mayúsculas/minúsculas). |
+| `buscar_cancion(cancion)` | O(n) | Busca el nodo que contiene ese objeto `Cancion` exacto (por identidad, no por título). |
+| `eliminar(titulo)` | O(n) | Busca por título y elimina el nodo correspondiente. |
+| `eliminar_nodo(nodo)` | O(1) | Desconecta un nodo ya localizado, recompone los enlaces vecinos y, si era el nodo `actual`, reubica el puntero. |
+| `siguiente()` / `anterior()` | O(1) | Avanza o retrocede el puntero `actual` un nodo. |
+| `nodos()` | O(n) | Generador que recorre todos los nodos en orden. |
+| `canciones()` | O(n) | Devuelve la playlist completa como `list[Cancion]`. |
+
+> **Nota:** el puntero `actual` cumple doble función — es a la vez el cursor de recorrido de la lista y la referencia a "qué canción está cargada en el reproductor" (`Playlist.cancion_actual` lo consulta directamente).
+
+### 6.4 `Pila` — historial de reproducción (LIFO)
+
+| Método | Complejidad | Descripción |
+|---|---|---|
+| `esta_vacia()` | O(1) | ¿Está vacía la pila? |
+| `push(cancion)` | O(1) amortizado | Apila una canción en el tope. |
+| `pop()` | O(1) | Retira y devuelve la canción del tope (la más reciente). |
+| `peek()` | O(1) | Consulta el tope sin retirarlo. |
+| `limpiar()` | O(n) | Vacía el historial por completo. |
+| `quitar_cancion(cancion)` | O(n) | Elimina una canción específica de cualquier posición (se usa al borrar una canción de la playlist, para mantener consistencia). |
+
+Se usa en `reproducir_siguiente` / `reproducir_anterior`: cada vez que se avanza a otra canción, la que estaba sonando se apila; "Anterior" primero intenta desapilar el historial antes de recurrir al enlace `anterior` del nodo.
+
+### 6.5 `Cola` — "a continuación" (FIFO)
+
+| Método | Complejidad | Descripción |
+|---|---|---|
+| `esta_vacia()` | O(1) | ¿Está vacía la cola? |
+| `enqueue(cancion)` | O(1) amortizado | Agrega una canción al final de la cola. |
+| `dequeue()` | O(n)* | Retira y devuelve la canción al frente de la cola. |
+| `eliminar_indice(indice)` | O(n) | Quita la canción en una posición específica (usado cuando el usuario borra un elemento puntual de la cola desde la interfaz). |
+| `limpiar()` | O(n) | Vacía la cola por completo. |
+| `quitar_cancion(cancion)` | O(n) | Elimina una canción específica de cualquier posición. |
+
+\* **Nota técnica:** `dequeue()` usa `list.pop(0)`, que en Python es O(n) porque desplaza el resto de los elementos una posición. Para colas muy grandes sería más eficiente usar `collections.deque`, que ofrece `popleft()` en O(1) manteniendo la misma interfaz pública (ver sección 14).
+
+`reproducir_siguiente` consulta primero esta cola: si hay algo esperando "a continuación", tiene prioridad sobre el orden normal de la playlist o el modo aleatorio.
+
+### 6.6 `Playlist` — fachada del sistema
+
+Integra las tres estructuras anteriores y concentra las operaciones que las mantienen consistentes entre sí.
+
+| Miembro | Descripción |
+|---|---|
+| `lista` | Instancia de `ListaDobleEnlazada`. |
+| `historial` | Instancia de `Pila`. |
+| `cola` | Instancia de `Cola`. |
+| `cancion_actual` (propiedad) | Canción actualmente seleccionada/cargada, o `None`. |
+| `seleccionar(cancion)` | Marca una canción como la actual (por identidad). |
+| `agregar(cancion, al_inicio=False)` | Agrega una canción al inicio o al final de la playlist. |
+| `eliminar(cancion)` | Elimina la canción de la playlist **y** la retira también de la cola y del historial, evitando referencias huérfanas. |
+| `cargar_ejemplo()` | Precarga 8 canciones de demostración al iniciar la aplicación. |
+
+## 7. Interfaz gráfica (`PlaylistApp`)
+
+### 7.1 Distribución general
+
+La ventana principal usa un `grid` de tres columnas:
+
+| Zona | Contenido |
+|---|---|
+| Barra lateral (izquierda) | Logo "NOVA", navegación entre páginas, botón "Agregar canción", pie con datos del proyecto. |
+| Área central | Barra superior con título de página y buscador en vivo; debajo, el contenido de la página activa (con scroll). |
+| Panel del reproductor (derecha) | Portada, título/artista actuales, barra de progreso, controles de reproducción, accesos a aleatorio/repetir/favorito/agregar a cola, y una vista miniatura de "A continuación". |
+
+### 7.2 Páginas de la aplicación
+
+| Página (clave interna) | Contenido |
+|---|---|
+| `inicio` | Banner de bienvenida, tarjetas de estadísticas (canciones, en cola, historial, favoritas), canciones añadidas recientemente y la biblioteca completa. |
+| `playlist` | Listado completo de la playlist en formato de tabla, con opción de eliminar cada canción. |
+| `cola` | Canción en reproducción + lista de canciones en espera en orden FIFO, con opción de vaciar la cola. |
+| `historial` | Historial de reproducción en orden inverso (lo más reciente primero), con opción de limpiarlo. |
+| `creadores` | Información del proyecto, tarjetas de los integrantes del equipo y explicación de las tres estructuras de datos utilizadas. |
+
+La navegación se maneja con `mostrar_pagina(pagina)`, que actualiza el título, resalta el botón activo en la barra lateral y llama a `refrescar_pagina()`, la cual reconstruye el contenido según la página seleccionada.
+
+### 7.3 Componentes reutilizables
+
+| Componente | Uso |
+|---|---|
+| `ScrollableFrame` | Contenedor con scroll vertical (rueda del mouse en Windows/macOS y Linux) usado en todas las páginas con contenido largo. |
+| `_fila_cancion` | Fila reutilizable de una canción: número, portada, título, artista, duración y botones según el contexto (favorito, agregar a cola, reproducir, eliminar). Se usa en Inicio, Playlist e Historial con distintas combinaciones de botones. |
+| `_fila_cola` | Fila específica de la página de cola: posición, portada, datos, reproducir y quitar. |
+| `_tarjeta_album` | Tarjeta de álbum (portada grande + título + artista) usada en "Añadidas recientemente". |
+| `_estado_vacio` | Mensaje ilustrado que se muestra cuando una lista no tiene elementos (playlist vacía, cola vacía, sin resultados de búsqueda, etc.), con botón de acción opcional. |
+| `_titulo_seccion` | Encabezado de sección con título, subtítulo y botón opcional "Ver todo →". |
+
+### 7.4 Portadas generativas
+
+Como el proyecto no incluye archivos de imagen, cada canción recibe una **portada generada por código** en un `Canvas` de Tkinter:
+
+1. `_paleta_cancion(cancion)` calcula un valor determinista a partir de las letras del título (una suma ponderada de códigos de carácter) y lo usa para elegir siempre la misma pareja de colores de `PALETAS` para esa canción.
+2. `_dibujar_portada(...)` pinta un degradado entre esos dos colores, agrega círculos translúcidos posicionados con un generador aleatorio *sembrado* (misma semilla ⇒ mismo resultado) y dibuja una línea tipo "onda de audio" con una función seno.
+3. En tamaño completo se agrega además la inicial del título y una marca de agua "NOVA MUSIC"; en miniatura (`compacta=True`) se omiten esos textos para mantener la legibilidad en espacios pequeños.
+
+Esto garantiza que cada canción tenga una portada visualmente distinta y **consistente** cada vez que se dibuja, sin depender de imágenes externas.
+
+### 7.5 Diálogo para agregar canciones
+
+`abrir_dialogo_agregar()` abre una ventana modal (`Toplevel`) centrada sobre la ventana principal, con:
+
+- Campos de texto: **Título**, **Artista**, **Duración** (formato `m:ss`).
+- Selector de posición: **Al inicio** o **Al final** de la playlist.
+- Validaciones antes de guardar:
+  - Ningún campo puede quedar vacío.
+  - La duración debe cumplir el patrón `\d{1,3}:\d{2}` (minutos:segundos).
+  - Los segundos deben estar entre `00` y `59`, y la duración total debe ser mayor a cero.
+- Atajos: `Enter` guarda, `Escape` cancela.
+
+Al guardar exitosamente, la canción se agrega al modelo, se limpia la búsqueda, se navega a la página **Playlist** y se muestra una notificación tipo *toast*.
+
+## 8. Lógica de reproducción
+
+La reproducción es simulada: no hay decodificación de audio real. Un temporizador (`_reloj_reproduccion`) corre cada 1000 ms mediante `root.after`; si la app está "reproduciendo", suma un segundo al tiempo transcurrido, y cuando ese tiempo alcanza la duración declarada de la canción, llama automáticamente a `reproducir_siguiente(automatico=True)`.
+
+**Prioridad al pulsar "Siguiente" (`reproducir_siguiente`):**
+
+1. Si el avance fue automático (la canción terminó sola) y el modo de repetición es "una", se reinicia la misma canción desde 0.
+2. Si hay canciones en la cola, se reproduce la primera (`Cola.dequeue()`).
+3. Si el modo aleatorio está activo, se elige al azar otra canción de la playlist (excluyendo la actual).
+4. En caso contrario, se sigue el enlace `siguiente` del nodo actual.
+5. Si no hay nodo siguiente pero el modo de repetición es "todas", se vuelve al primer nodo de la lista.
+6. Si nada de lo anterior aplica, la reproducción se detiene, el progreso se fija al final de la canción y se muestra un aviso de "fin de la playlist".
+
+**Prioridad al pulsar "Anterior" (`reproducir_anterior`):**
+
+1. Si llevan reproducidos más de 5 segundos, "Anterior" reinicia la canción actual desde 0 (comportamiento típico de reproductores comerciales).
+2. Si no, se desapila la última canción del historial (`Pila.pop()`).
+3. Si el historial está vacío, se usa el enlace `anterior` del nodo actual.
+4. Si tampoco hay nodo anterior pero el modo de repetición es "todas", se salta a la última canción de la lista.
+5. Si nada de esto aplica, se muestra un aviso de que ya se está en la primera canción.
+
+> **Nota sobre el historial:** únicamente `reproducir_siguiente` apila la canción saliente en el historial (salvo cuando solo se reinicia la misma canción por el modo "repetir una"). `reproducir_anterior` solo consume el historial, o recurre al enlace `anterior` / al modo "repetir todas", pero no vuelve a apilar la canción de la que se aleja. Por eso, retroceder y luego avanzar no siempre regresa exactamente al mismo punto: depende de cuántas entradas queden en el historial.
+
+## 9. Funcionalidades principales
+
+- Reproducir, pausar, avanzar y retroceder canciones.
+- Agregar canciones nuevas (al inicio o al final de la playlist) mediante un formulario validado.
+- Eliminar canciones de la playlist, con confirmación previa.
+- Buscar canciones por título o artista en tiempo real; si se busca desde una página distinta a Inicio o Playlist, la app cambia automáticamente a "Mi playlist" para mostrar los resultados.
+- Marcar y desmarcar canciones como favoritas.
+- Agregar canciones a la cola "a continuación" y quitarlas individualmente o vaciar la cola completa.
+- Consultar el historial de reproducción (orden LIFO) y limpiarlo.
+- Modo aleatorio (shuffle).
+- Modo de repetición con tres estados: apagado, repetir toda la playlist, repetir una canción.
+- Barra de progreso interactiva: se puede arrastrar para adelantar o retroceder dentro de la canción simulada.
+- Notificaciones emergentes (*toasts*) que confirman cada acción relevante.
+- Página informativa con los datos del proyecto y del equipo de desarrollo.
+
+## 10. Atajos de teclado
+
+| Atajo | Acción |
+|---|---|
+| `Barra espaciadora` | Reproducir / pausar (se ignora si el foco está en un campo de texto). |
+| `Ctrl + F` | Enfocar y seleccionar el contenido del buscador. |
+| `Ctrl + N` | Abrir el diálogo para agregar una canción. |
+| `Enter` (en el diálogo de agregar) | Guardar la canción. |
+| `Escape` (en el diálogo de agregar) | Cancelar y cerrar el diálogo. |
+
+## 11. Paleta de colores y diseño visual
+
+La aplicación define su propio sistema de diseño en el diccionario `COLORES` (tema oscuro):
+
+| Color | Hex | Uso principal |
+|---|---|---|
+| Fondo | `#090E17` | Fondo general de la ventana. |
+| Barra | `#0D1420` | Barra lateral y panel del reproductor. |
+| Panel | `#121B29` | Banners y fondos de diálogos. |
+| Tarjeta | `#182332` | Fondo de filas y tarjetas. |
+| Tarjeta clara | `#1D2A3B` | Resalta la fila de la canción activa. |
+| Línea | `#243347` | Separadores. |
+| Texto | `#F4F7FB` | Texto principal. |
+| Secundario | `#8D9AAF` | Texto secundario o atenuado. |
+| Acento | `#20D6BE` | Color de marca: botones principales y estados activos. |
+| Morado / Coral / Amarillo | `#7457F7` / `#FF7288` / `#FFB55F` | Acentos para estadísticas y estructuras. |
+| Peligro | `#FF647C` | Acciones destructivas (eliminar, vaciar). |
+
+Las 8 combinaciones de `PALETAS` (pares de colores) se usan exclusivamente para generar las portadas de las canciones (ver sección 7.4).
+
+## 12. Mapa del código fuente
+
+Referencia rápida de dónde se ubica cada parte dentro de `playlist_musical_gui.py`:
+
+| Sección | Contenido |
+|---|---|
+| Encabezado y metadatos | Docstring del proyecto, `NOMBRE_PROYECTO`, `MATERIA`, `INSTITUCION`, `CREADORES`. |
+| Modelo | `Cancion`, `Nodo`, `ListaDobleEnlazada`, `Pila`, `Cola`, `Playlist`. |
+| Componentes visuales genéricos | `ScrollableFrame`, `mezclar_color`, `formato_tiempo`. |
+| Aplicación gráfica | Clase `PlaylistApp`: configuración de ventana, construcción de interfaz, páginas, componentes de página, portadas generativas, diálogo de agregar, acciones de playlist/cola/historial, motor de reproducción, sincronización del reproductor y notificaciones. |
+| Punto de entrada | `main()` y bloque `if __name__ == "__main__":`. |
+
+## 13. Limitaciones conocidas
+
+- **No reproduce audio real:** el avance del tiempo es simulado con un temporizador; no hay archivos de sonido ni un backend de audio.
+- **No hay persistencia:** todos los datos (playlist, cola, historial, favoritos) existen solo en memoria y se pierden al cerrar la aplicación.
+- **`Cola.dequeue()` es O(n):** al usar `list.pop(0)`, cada extracción desplaza el resto de los elementos (ver sección 6.5).
+- **Búsqueda exacta o por subcadena:** no distingue mayúsculas/minúsculas, pero no incluye búsqueda difusa (*fuzzy*) ni corrección de errores de tipeo.
+- Pensada para una sola ventana/instancia; no contempla múltiples usuarios ni sincronización.
+
+## 14. Posibles mejoras futuras
+
+- Reproducción de audio real (por ejemplo, con `pygame.mixer` o `playsound`) usando archivos locales.
+- Persistencia en disco (JSON, SQLite) para conservar la playlist entre sesiones.
+- Reemplazar `Cola` por una implementación basada en `collections.deque` para lograr `dequeue()` en O(1).
+- Edición de canciones ya existentes (actualmente solo se pueden agregar o eliminar).
+- Exportar e importar playlists.
+- Pruebas unitarias automatizadas para el modelo (`Cancion`, `ListaDobleEnlazada`, `Pila`, `Cola`, `Playlist`), que ya está desacoplado de Tkinter y es fácil de probar de forma aislada.
+
+## 15. Créditos
+
+Proyecto desarrollado para la materia **Estructura de Datos y Algoritmos** — **CEUMH**.
+
+| Integrante |
+|---|
+| Mitchel Ledesma |
+| Santiago Arellano |
+| Xavier Zaldivar |
+| Brandon Reyes |
+
+---
+
+*Documento generado a partir del análisis del archivo `playlist_musical_gui.py`.*
